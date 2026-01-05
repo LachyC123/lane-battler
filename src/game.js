@@ -157,6 +157,10 @@ class GameScene extends Phaser.Scene {
         this.createLanes();
         this.createTowers();
         
+        // Initialize character art system
+        this.characterArt = new CharacterArt(this);
+        this.characterArt.generateAllTextures();
+        
         // Get UI scene reference
         this.uiScene = this.scene.get('UIScene');
         
@@ -555,65 +559,24 @@ class GameScene extends Phaser.Scene {
     }
     
     createUnitVisual(card, x, y, isEnemy) {
-        const size = card.stats.size;
+        // Use CharacterArt system for styled characters
+        if (this.characterArt && card.type === CARD_TYPES.UNIT) {
+            return this.characterArt.createCharacter(card.id, isEnemy, x, y);
+        }
         
-        // Create container for unit + shadow
+        // Fallback for tactics or if CharacterArt not ready
+        const size = card.stats.size;
         const container = this.add.container(x, y);
         container.setDepth(20);
         
-        // Shadow
         const shadow = this.add.ellipse(0, size * 0.5, size * 1.2, size * 0.4, 0x000000, 0.25);
         container.add(shadow);
         container.shadow = shadow;
         
-        // Main unit shape
-        let shape;
-        const borderColor = isEnemy ? 0xff6666 : 0x6688ff;
-        
-        switch (card.shape) {
-            case 'triangle':
-                shape = this.add.triangle(0, 0, -size/2, size/2, size/2, size/2, 0, -size/2, card.color);
-                if (isEnemy) shape.setRotation(Math.PI);
-                break;
-            case 'hexagon':
-                shape = this.add.polygon(0, 0, [
-                    0, -size, size*0.87, -size/2, size*0.87, size/2,
-                    0, size, -size*0.87, size/2, -size*0.87, -size/2
-                ], card.color);
-                shape.setScale(0.7);
-                break;
-            case 'square':
-                shape = this.add.rectangle(0, 0, size, size, card.color);
-                break;
-            case 'diamond':
-                shape = this.add.polygon(0, 0, [0, -size, size, 0, 0, size, -size, 0], card.color);
-                shape.setScale(0.7);
-                break;
-            case 'circle':
-                shape = this.add.circle(0, 0, size/2, card.color);
-                break;
-            case 'plus':
-                const h = this.add.rectangle(0, 0, size, size/3, card.color);
-                const v = this.add.rectangle(0, 0, size/3, size, card.color);
-                h.setStrokeStyle(1, borderColor, 0.5);
-                v.setStrokeStyle(1, borderColor, 0.5);
-                container.add(h);
-                container.add(v);
-                container.mainShape = h;
-                return container;
-            default:
-                shape = this.add.circle(0, 0, size/2, card.color);
-        }
-        
-        if (shape.setStrokeStyle) {
-            shape.setStrokeStyle(2, borderColor, 0.8);
-        }
+        const shape = this.add.circle(0, 0, size/2, card.color);
+        shape.setStrokeStyle(2, isEnemy ? 0xff6666 : 0x6688ff, 0.8);
         container.add(shape);
-        container.mainShape = shape;
-        
-        // Small highlight
-        const highlight = this.add.circle(-size * 0.15, -size * 0.15, size * 0.15, 0xffffff, 0.2);
-        container.add(highlight);
+        container.sprite = shape;
         
         return container;
     }
@@ -699,6 +662,9 @@ class GameScene extends Phaser.Scene {
                 this.updateHealerDrone(unit, currentTime);
             }
             
+            let isMoving = false;
+            let moveDir = 0;
+            
             if (unit.target) {
                 const dx = unit.target.x - unit.x;
                 const dy = unit.target.y - unit.y;
@@ -710,6 +676,8 @@ class GameScene extends Phaser.Scene {
                 } else {
                     // Move towards target
                     this.moveUnit(unit, dx / dist, dy / dist, dt);
+                    isMoving = true;
+                    moveDir = dy;
                 }
             } else {
                 // Move towards enemy base
@@ -717,6 +685,19 @@ class GameScene extends Phaser.Scene {
                 const dy = targetY - unit.y;
                 const direction = dy > 0 ? 1 : -1;
                 this.moveUnit(unit, 0, direction, dt);
+                isMoving = true;
+                moveDir = dy;
+            }
+            
+            // Handle walk/idle animation state
+            if (this.characterArt && unit.visual.animState) {
+                if (isMoving && !unit.visual.animState.walking) {
+                    unit.visual.animState.walking = true;
+                    this.characterArt.startWalkAnimation(unit.visual, moveDir);
+                } else if (!isMoving && unit.visual.animState.walking) {
+                    unit.visual.animState.walking = false;
+                    this.characterArt.stopWalkAnimation(unit.visual);
+                }
             }
             
             // Update visual position
@@ -817,6 +798,12 @@ class GameScene extends Phaser.Scene {
         if (currentTime - unit.lastAttackTime < attackCooldown) return;
         
         unit.lastAttackTime = currentTime;
+        
+        // Play attack animation
+        const isMelee = unit.range <= 50;
+        if (this.characterArt && unit.visual.animState) {
+            this.characterArt.playAttackAnimation(unit.visual, isMelee);
+        }
         
         let damage = unit.damage;
         
@@ -1068,18 +1055,25 @@ class GameScene extends Phaser.Scene {
         // Death sound
         window.sfx.play('death');
         
-        // Death pop effect - scale up then fade
-        this.tweens.add({
-            targets: unit.visual,
-            scaleX: 1.5,
-            scaleY: 1.5,
-            alpha: 0,
-            duration: 150,
-            ease: 'Quad.easeOut',
-            onComplete: () => {
-                unit.visual.destroy();
-            }
-        });
+        // Use CharacterArt death animation if available
+        if (this.characterArt && unit.visual.animState) {
+            this.characterArt.playDeathAnimation(unit.visual, () => {
+                if (unit.visual) unit.visual.destroy();
+            });
+        } else {
+            // Fallback death effect
+            this.tweens.add({
+                targets: unit.visual,
+                scaleX: 1.5,
+                scaleY: 1.5,
+                alpha: 0,
+                duration: 150,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    if (unit.visual) unit.visual.destroy();
+                }
+            });
+        }
         
         // Remove HP bar immediately
         if (unit.hpBar) {
@@ -1431,7 +1425,13 @@ class GameScene extends Phaser.Scene {
     createHitFlash(target) {
         if (!target.visual || target.destroyed) return;
         
-        // Quick white flash
+        // Use CharacterArt hit animation for units with animState
+        if (this.characterArt && target.visual.animState) {
+            this.characterArt.playHitAnimation(target.visual);
+            return;
+        }
+        
+        // Quick white flash for other objects
         if (target.visual.mainShape && target.visual.mainShape.setTint) {
             target.visual.mainShape.setTint(0xffffff);
             this.time.delayedCall(50, () => {

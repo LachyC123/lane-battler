@@ -8,6 +8,9 @@ class UIScene extends Phaser.Scene {
     create() {
         this.gameScene = this.scene.get('GameScene');
         
+        // Initialize CharacterArt for card icons
+        this.characterArt = new CharacterArt(this);
+        
         // UI dimensions
         this.hudHeight = 110;
         this.cardWidth = 64;
@@ -534,10 +537,18 @@ class UIScene extends Phaser.Scene {
         highlight.fillRoundedRect(-w/2 + 3, -h/2 + 3, w - 6, h/3, 6 * scale);
         container.add(highlight);
         
-        // Card icon
+        // Card icon - use CharacterArt for units
         const iconY = -h/4 - 2;
         const iconSize = 18 * scale;
-        this.createCardIcon(container, card, iconY, iconSize);
+        
+        if (card.type === CARD_TYPES.UNIT && this.characterArt) {
+            const iconKey = this.characterArt.generateIconTexture(card.id);
+            const charIcon = this.add.image(0, iconY, iconKey);
+            charIcon.setScale(0.7 * scale);
+            container.add(charIcon);
+        } else {
+            this.createCardIcon(container, card, iconY, iconSize);
+        }
         
         // Card name
         const name = this.add.text(0, h/4 - 6 * scale, card.name, {
