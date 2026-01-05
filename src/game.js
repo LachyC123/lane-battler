@@ -1,5 +1,101 @@
 // game.js - Main game scene and logic for Lane Storm
 
+// Simple SFX using Web Audio API
+class SFX {
+    constructor() {
+        this.muted = false;
+        this.ctx = null;
+        this.initAudio();
+        this.setupMuteButton();
+    }
+    
+    initAudio() {
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Web Audio not supported');
+        }
+    }
+    
+    setupMuteButton() {
+        const btn = document.getElementById('mute-btn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                this.muted = !this.muted;
+                btn.textContent = this.muted ? '🔇' : '🔊';
+                btn.classList.toggle('muted', this.muted);
+            });
+        }
+    }
+    
+    play(type) {
+        if (this.muted || !this.ctx) return;
+        
+        // Resume context if suspended (browser autoplay policy)
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        const now = this.ctx.currentTime;
+        
+        switch (type) {
+            case 'spawn':
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.type = 'sine';
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+            case 'hit':
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.08);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.type = 'square';
+                osc.start(now);
+                osc.stop(now + 0.08);
+                break;
+            case 'towerHit':
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.type = 'sawtooth';
+                osc.start(now);
+                osc.stop(now + 0.12);
+                break;
+            case 'towerDown':
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.type = 'sawtooth';
+                osc.start(now);
+                osc.stop(now + 0.5);
+                break;
+            case 'death':
+                osc.frequency.setValueAtTime(250, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.type = 'triangle';
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+        }
+    }
+}
+
+// Global SFX instance
+window.sfx = window.sfx || new SFX();
+
 class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
@@ -421,6 +517,9 @@ class GameScene extends Phaser.Scene {
         
         // Spawn effect
         this.createSpawnEffect(x, y, card.color);
+        
+        // Spawn sound
+        window.sfx.play('spawn');
     }
     
     createUnitVisual(card, x, y, isEnemy) {
@@ -810,8 +909,14 @@ class GameScene extends Phaser.Scene {
         
         target.hp -= damage;
         
+        // Hit flash effect
+        this.createHitFlash(target);
+        
         // Check if it's a tower
         if (target.isCore !== undefined) {
+            // Screen shake on tower hit
+            this.cameras.main.shake(80, 0.005);
+            window.sfx.play('towerHit');
             // Add momentum for tower damage
             const momentumGain = damage / 20;
             if (source.isEnemy) {
@@ -835,7 +940,8 @@ class GameScene extends Phaser.Scene {
                 target.destroy = true;
             }
         } else {
-            // Unit death
+            // Unit hit/death
+            window.sfx.play('hit');
             if (target.hp <= 0) {
                 this.destroyUnit(target);
             }
@@ -848,6 +954,10 @@ class GameScene extends Phaser.Scene {
     destroyTower(tower) {
         tower.destroyed = true;
         tower.hp = 0;
+        
+        // Big screen shake for tower destruction
+        this.cameras.main.shake(300, 0.015);
+        window.sfx.play('towerDown');
         
         // Visual destruction
         this.tweens.add({
@@ -874,14 +984,29 @@ class GameScene extends Phaser.Scene {
     }
     
     destroyUnit(unit) {
-        // Death effect
-        this.createExplosionEffect(unit.x, unit.y, unit.card.color, true);
+        // Death sound
+        window.sfx.play('death');
         
-        // Remove visual
-        unit.visual.destroy();
+        // Death pop effect - scale up then fade
+        this.tweens.add({
+            targets: unit.visual,
+            scaleX: 1.5,
+            scaleY: 1.5,
+            alpha: 0,
+            duration: 150,
+            ease: 'Quad.easeOut',
+            onComplete: () => {
+                unit.visual.destroy();
+            }
+        });
+        
+        // Remove HP bar immediately
         if (unit.hpBar) {
             unit.hpBar.container.destroy();
         }
+        
+        // Particle burst
+        this.createExplosionEffect(unit.x, unit.y, unit.card.color, true);
         
         unit.destroy = true;
     }
@@ -1219,6 +1344,21 @@ class GameScene extends Phaser.Scene {
             duration: 500,
             onComplete: () => plus.destroy()
         });
+    }
+    
+    createHitFlash(target) {
+        if (!target.visual || target.destroyed) return;
+        
+        // Quick white flash
+        const originalTint = target.visual.tintTopLeft;
+        if (target.visual.setTint) {
+            target.visual.setTint(0xffffff);
+            this.time.delayedCall(50, () => {
+                if (target.visual && !target.destroyed) {
+                    target.visual.clearTint();
+                }
+            });
+        }
     }
 }
 
