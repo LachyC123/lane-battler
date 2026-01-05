@@ -14,9 +14,40 @@ class CharacterArt {
         
         teams.forEach(team => {
             unitTypes.forEach(type => {
-                this.generateUnitTexture(type, team);
+                try {
+                    this.generateUnitTexture(type, team);
+                } catch (e) {
+                    console.error(`Failed to generate texture for ${team}_${type}:`, e);
+                    this.generateFallbackTexture(type, team);
+                }
             });
         });
+    }
+    
+    // Fallback texture if generation fails
+    generateFallbackTexture(unitType, team) {
+        const key = `${team}_${unitType}`;
+        if (this.scene.textures.exists(key)) return key;
+        
+        const size = 80;
+        const g = this.scene.add.graphics();
+        const isEnemy = team === 'enemy';
+        const color = isEnemy ? 0xcc4455 : 0x4488cc;
+        const cx = size / 2, cy = size / 2;
+        
+        // Simple fallback silhouette
+        g.fillStyle(color, 1);
+        g.fillCircle(cx, cy - 10, 12); // Head
+        g.fillRoundedRect(cx - 10, cy, 20, 24, 6); // Body
+        g.lineStyle(2, 0x1a1a2e, 1);
+        g.strokeCircle(cx, cy - 10, 12);
+        g.strokeRoundedRect(cx - 10, cy, 20, 24, 6);
+        
+        g.generateTexture(key, size, size);
+        g.destroy();
+        this.textureCache[key] = true;
+        console.log(`Created fallback texture for ${key}`);
+        return key;
     }
     
     // Color palette for units
@@ -55,20 +86,26 @@ class CharacterArt {
         const c = this.getUnitColors(unitType, team === 'enemy');
         const cx = size / 2, cy = size / 2;
         
-        // Draw character based on type
-        switch (unitType) {
-            case 'runner': this.drawRunner(g, cx, cy, c); break;
-            case 'guardian': this.drawGuardian(g, cx, cy, c); break;
-            case 'slingbot': this.drawSlingbot(g, cx, cy, c); break;
-            case 'sparkMage': this.drawSparkMage(g, cx, cy, c); break;
-            case 'bomberBug': this.drawBomberBug(g, cx, cy, c); break;
-            case 'healerDrone': this.drawHealerDrone(g, cx, cy, c); break;
+        try {
+            // Draw character based on type
+            switch (unitType) {
+                case 'runner': this.drawRunner(g, cx, cy, c); break;
+                case 'guardian': this.drawGuardian(g, cx, cy, c); break;
+                case 'slingbot': this.drawSlingbot(g, cx, cy, c); break;
+                case 'sparkMage': this.drawSparkMage(g, cx, cy, c); break;
+                case 'bomberBug': this.drawBomberBug(g, cx, cy, c); break;
+                case 'healerDrone': this.drawHealerDrone(g, cx, cy, c); break;
+            }
+            
+            g.generateTexture(key, size, size);
+            g.destroy();
+            this.textureCache[key] = true;
+            return key;
+        } catch (e) {
+            g.destroy();
+            console.error(`Error drawing ${unitType}:`, e);
+            return this.generateFallbackTexture(unitType, team);
         }
-        
-        g.generateTexture(key, size, size);
-        g.destroy();
-        this.textureCache[key] = true;
-        return key;
     }
     
     // === CHARACTER DRAWING ===
@@ -465,7 +502,9 @@ class CharacterArt {
         g.beginPath();
         g.moveTo(cx - 14, cy - 6);
         g.lineTo(cx - 18, cy + 24);
-        g.quadraticCurveTo(cx, cy + 28, cx + 18, cy + 24);
+        g.lineTo(cx - 8, cy + 28);
+        g.lineTo(cx + 8, cy + 28);
+        g.lineTo(cx + 18, cy + 24);
         g.lineTo(cx + 14, cy - 6);
         g.closePath();
         g.fillPath();
@@ -475,7 +514,8 @@ class CharacterArt {
         g.beginPath();
         g.moveTo(cx - 6, cy);
         g.lineTo(cx - 10, cy + 22);
-        g.quadraticCurveTo(cx, cy + 24, cx + 10, cy + 22);
+        g.lineTo(cx, cy + 24);
+        g.lineTo(cx + 10, cy + 22);
         g.lineTo(cx + 6, cy);
         g.closePath();
         g.fillPath();
@@ -508,7 +548,10 @@ class CharacterArt {
         g.fillStyle(c.primary, 1);
         g.beginPath();
         g.moveTo(cx - 14, cy - 8);
-        g.quadraticCurveTo(cx, cy - 32, cx + 14, cy - 8);
+        g.lineTo(cx - 8, cy - 24);
+        g.lineTo(cx, cy - 28);
+        g.lineTo(cx + 8, cy - 24);
+        g.lineTo(cx + 14, cy - 8);
         g.lineTo(cx + 12, cy);
         g.lineTo(cx - 12, cy);
         g.closePath();
@@ -518,7 +561,10 @@ class CharacterArt {
         g.fillStyle(c.dark, 0.8);
         g.beginPath();
         g.moveTo(cx - 10, cy - 6);
-        g.quadraticCurveTo(cx, cy - 24, cx + 10, cy - 6);
+        g.lineTo(cx - 6, cy - 18);
+        g.lineTo(cx, cy - 20);
+        g.lineTo(cx + 6, cy - 18);
+        g.lineTo(cx + 10, cy - 6);
         g.lineTo(cx + 8, cy - 2);
         g.lineTo(cx - 8, cy - 2);
         g.closePath();
@@ -528,7 +574,8 @@ class CharacterArt {
         g.fillStyle(c.secondary, 0.3);
         g.beginPath();
         g.moveTo(cx - 12, cy - 10);
-        g.quadraticCurveTo(cx - 6, cy - 26, cx, cy - 26);
+        g.lineTo(cx - 8, cy - 22);
+        g.lineTo(cx - 2, cy - 24);
         g.lineTo(cx - 4, cy - 10);
         g.closePath();
         g.fillPath();
@@ -584,7 +631,10 @@ class CharacterArt {
         g.lineStyle(2.5, outline, 1);
         g.beginPath();
         g.moveTo(cx - 14, cy - 8);
-        g.quadraticCurveTo(cx, cy - 32, cx + 14, cy - 8);
+        g.lineTo(cx - 8, cy - 24);
+        g.lineTo(cx, cy - 28);
+        g.lineTo(cx + 8, cy - 24);
+        g.lineTo(cx + 14, cy - 8);
         g.strokePath();
     }
     
@@ -595,11 +645,13 @@ class CharacterArt {
         g.lineStyle(3, c.dark, 1);
         g.beginPath();
         g.moveTo(cx - 6, cy - 22);
-        g.quadraticCurveTo(cx - 10, cy - 32, cx - 8, cy - 36);
+        g.lineTo(cx - 8, cy - 30);
+        g.lineTo(cx - 8, cy - 36);
         g.strokePath();
         g.beginPath();
         g.moveTo(cx + 6, cy - 22);
-        g.quadraticCurveTo(cx + 10, cy - 32, cx + 8, cy - 36);
+        g.lineTo(cx + 8, cy - 30);
+        g.lineTo(cx + 8, cy - 36);
         g.strokePath();
         
         // Antenna tips
@@ -650,7 +702,8 @@ class CharacterArt {
         g.lineStyle(2, 0x665544, 1);
         g.beginPath();
         g.moveTo(cx, cy + 1);
-        g.quadraticCurveTo(cx + 4, cy - 4, cx + 2, cy - 8);
+        g.lineTo(cx + 3, cy - 3);
+        g.lineTo(cx + 2, cy - 8);
         g.strokePath();
         
         // Fuse spark
