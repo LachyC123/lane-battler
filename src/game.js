@@ -1,5 +1,101 @@
 // game.js - Main game scene and logic for Lane Storm
 
+// Simple SFX using Web Audio API
+class SFX {
+    constructor() {
+        this.muted = false;
+        this.ctx = null;
+        this.initAudio();
+        this.setupMuteButton();
+    }
+    
+    initAudio() {
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Web Audio not supported');
+        }
+    }
+    
+    setupMuteButton() {
+        const btn = document.getElementById('mute-btn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                this.muted = !this.muted;
+                btn.textContent = this.muted ? '🔇' : '🔊';
+                btn.classList.toggle('muted', this.muted);
+            });
+        }
+    }
+    
+    play(type) {
+        if (this.muted || !this.ctx) return;
+        
+        // Resume context if suspended (browser autoplay policy)
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        const now = this.ctx.currentTime;
+        
+        switch (type) {
+            case 'spawn':
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.type = 'sine';
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+            case 'hit':
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.08);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.type = 'square';
+                osc.start(now);
+                osc.stop(now + 0.08);
+                break;
+            case 'towerHit':
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.type = 'sawtooth';
+                osc.start(now);
+                osc.stop(now + 0.12);
+                break;
+            case 'towerDown':
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.type = 'sawtooth';
+                osc.start(now);
+                osc.stop(now + 0.5);
+                break;
+            case 'death':
+                osc.frequency.setValueAtTime(250, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.type = 'triangle';
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+        }
+    }
+}
+
+// Global SFX instance
+window.sfx = window.sfx || new SFX();
+
 class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
@@ -61,6 +157,10 @@ class GameScene extends Phaser.Scene {
         this.createLanes();
         this.createTowers();
         
+        // Initialize character art system
+        this.characterArt = new CharacterArt(this);
+        this.characterArt.generateAllTextures();
+        
         // Get UI scene reference
         this.uiScene = this.scene.get('UIScene');
         
@@ -83,38 +183,44 @@ class GameScene extends Phaser.Scene {
     }
     
     createBackground() {
-        // Arena background
-        this.add.rectangle(
-            this.gameWidth / 2,
-            this.playAreaHeight / 2,
-            this.gameWidth,
-            this.playAreaHeight,
-            0x2d4a3e
-        );
+        // Arena gradient background
+        const bgGraphics = this.add.graphics();
         
-        // Player side (darker)
-        this.add.rectangle(
-            this.gameWidth / 2,
-            this.playAreaHeight * 0.75,
-            this.gameWidth,
-            this.playAreaHeight / 2,
-            0x1a3a2e,
-            0.5
-        );
+        // Enemy side (top) - darker red tint
+        bgGraphics.fillGradientStyle(0x1a2832, 0x1a2832, 0x243442, 0x243442, 1);
+        bgGraphics.fillRect(0, 0, this.gameWidth, this.midY);
         
-        // Middle line
-        this.add.rectangle(
-            this.gameWidth / 2,
-            this.midY,
-            this.gameWidth,
-            4,
-            0x4a90d9,
-            0.7
-        );
+        // Player side (bottom) - blue tint
+        bgGraphics.fillGradientStyle(0x1a2838, 0x1a2838, 0x162430, 0x162430, 1);
+        bgGraphics.fillRect(0, this.midY, this.gameWidth, this.midY);
         
-        // Grid pattern
+        // Subtle texture pattern
+        const textureGraphics = this.add.graphics();
+        textureGraphics.setAlpha(0.08);
+        for (let x = 0; x < this.gameWidth; x += 20) {
+            for (let y = 0; y < this.playAreaHeight; y += 20) {
+                if ((x + y) % 40 === 0) {
+                    textureGraphics.fillStyle(0xffffff);
+                    textureGraphics.fillRect(x, y, 10, 10);
+                }
+            }
+        }
+        
+        // River/middle divider with glow effect
+        const riverGraphics = this.add.graphics();
+        riverGraphics.fillStyle(0x4a90d9, 0.15);
+        riverGraphics.fillRect(0, this.midY - 15, this.gameWidth, 30);
+        
+        riverGraphics.lineStyle(4, 0x4a90d9, 0.8);
+        riverGraphics.lineBetween(0, this.midY, this.gameWidth, this.midY);
+        
+        riverGraphics.lineStyle(1, 0x7ab8e8, 0.5);
+        riverGraphics.lineBetween(0, this.midY - 2, this.gameWidth, this.midY - 2);
+        riverGraphics.lineBetween(0, this.midY + 2, this.gameWidth, this.midY + 2);
+        
+        // Soft grid overlay
         const gridGraphics = this.add.graphics();
-        gridGraphics.lineStyle(1, 0x3a5a4e, 0.3);
+        gridGraphics.lineStyle(1, 0x4a6a7e, 0.12);
         
         for (let x = 0; x < this.gameWidth; x += 40) {
             gridGraphics.lineBetween(x, 0, x, this.playAreaHeight);
@@ -125,28 +231,40 @@ class GameScene extends Phaser.Scene {
     }
     
     createLanes() {
-        // Lane visual indicators
-        const laneWidth = 80;
+        const laneWidth = 90;
+        const laneGraphics = this.add.graphics();
         
-        // Top lane (left side)
-        this.add.rectangle(
-            this.topLaneX,
-            this.playAreaHeight / 2,
-            laneWidth,
-            this.playAreaHeight - 100,
-            0x4a6a5e,
-            0.3
-        );
+        // Lane backgrounds with subtle gradient effect
+        [this.topLaneX, this.bottomLaneX].forEach(laneX => {
+            // Main lane
+            laneGraphics.fillStyle(0x2a3a4a, 0.4);
+            laneGraphics.fillRoundedRect(
+                laneX - laneWidth/2, 
+                60, 
+                laneWidth, 
+                this.playAreaHeight - 120,
+                8
+            );
+            
+            // Lane border
+            laneGraphics.lineStyle(2, 0x4a6a8a, 0.3);
+            laneGraphics.strokeRoundedRect(
+                laneX - laneWidth/2, 
+                60, 
+                laneWidth, 
+                this.playAreaHeight - 120,
+                8
+            );
+            
+            // Lane center line (path indicator)
+            laneGraphics.lineStyle(2, 0x5a7a9a, 0.15);
+            laneGraphics.lineBetween(laneX, 80, laneX, this.playAreaHeight - 80);
+        });
         
-        // Bottom lane (right side)
-        this.add.rectangle(
-            this.bottomLaneX,
-            this.playAreaHeight / 2,
-            laneWidth,
-            this.playAreaHeight - 100,
-            0x4a6a5e,
-            0.3
-        );
+        // Lane labels
+        const labelStyle = { fontSize: '10px', fontFamily: 'Exo 2', color: '#5a7a9a' };
+        this.add.text(this.topLaneX, 15, 'LEFT LANE', labelStyle).setOrigin(0.5).setAlpha(0.5);
+        this.add.text(this.bottomLaneX, 15, 'RIGHT LANE', labelStyle).setOrigin(0.5).setAlpha(0.5);
     }
     
     createTowers() {
@@ -181,24 +299,38 @@ class GameScene extends Phaser.Scene {
             destroyed: false
         };
         
-        // Visual
-        const color = isEnemy ? 0xcc4444 : 0x4444cc;
+        // Platform/base
+        const platformGraphics = this.add.graphics();
+        platformGraphics.fillStyle(isEnemy ? 0x3a2020 : 0x202040, 0.8);
+        platformGraphics.fillEllipse(x, y + size * 0.6, size * 2.2, size * 0.8);
+        platformGraphics.lineStyle(2, isEnemy ? 0x5a3030 : 0x303060, 0.6);
+        platformGraphics.strokeEllipse(x, y + size * 0.6, size * 2.2, size * 0.8);
+        platformGraphics.setDepth(8);
+        
+        // Tower glow (range indicator on hover would go here)
+        tower.glow = this.add.circle(x, y, size + 8, isEnemy ? 0xff4444 : 0x4444ff, 0.12);
+        tower.glow.setDepth(9);
+        
+        // Main tower visual
+        const color = isEnemy ? 0xcc4444 : 0x4488cc;
+        const highlightColor = isEnemy ? 0xff6666 : 0x66aaff;
         
         if (isCore) {
             tower.visual = this.add.polygon(x, y, [
                 0, -size, size*0.87, -size/2, size*0.87, size/2,
                 0, size, -size*0.87, size/2, -size*0.87, -size/2
             ], color);
+            tower.visual.setStrokeStyle(3, highlightColor);
         } else {
-            tower.visual = this.add.rectangle(x, y, size * 1.5, size * 1.5, color);
+            tower.visual = this.add.rectangle(x, y, size * 1.4, size * 1.4, color);
+            tower.visual.setStrokeStyle(2, highlightColor);
         }
-        
-        tower.visual.setStrokeStyle(3, isEnemy ? 0xff6666 : 0x6666ff);
         tower.visual.setDepth(10);
         
-        // Tower glow
-        tower.glow = this.add.circle(x, y, size + 5, color, 0.2);
-        tower.glow.setDepth(9);
+        // Inner detail/shine
+        const innerSize = size * 0.4;
+        tower.inner = this.add.circle(x, y - size * 0.1, innerSize, highlightColor, 0.3);
+        tower.inner.setDepth(11);
         
         return tower;
     }
@@ -209,7 +341,7 @@ class GameScene extends Phaser.Scene {
         Object.keys(this.towers).forEach(key => {
             const tower = this.towers[key];
             if (!tower.destroyed) {
-                tower.hpBar = this.uiScene.createTowerHPBar(tower.x, tower.y, tower.isEnemy);
+                tower.hpBar = this.uiScene.createTowerHPBar(tower.x, tower.y, tower.isEnemy, tower.isCore);
             }
         });
     }
@@ -421,48 +553,32 @@ class GameScene extends Phaser.Scene {
         
         // Spawn effect
         this.createSpawnEffect(x, y, card.color);
+        
+        // Spawn sound
+        window.sfx.play('spawn');
     }
     
     createUnitVisual(card, x, y, isEnemy) {
+        // Use CharacterArt system for styled characters
+        if (this.characterArt && card.type === CARD_TYPES.UNIT) {
+            return this.characterArt.createCharacter(card.id, isEnemy, x, y);
+        }
+        
+        // Fallback for tactics or if CharacterArt not ready
         const size = card.stats.size;
-        let visual;
+        const container = this.add.container(x, y);
+        container.setDepth(20);
         
-        switch (card.shape) {
-            case 'triangle':
-                visual = this.add.triangle(x, y, 0, size, size, size, size/2, 0, card.color);
-                if (isEnemy) visual.setRotation(Math.PI);
-                break;
-            case 'hexagon':
-                visual = this.add.polygon(x, y, [
-                    0, -size, size*0.87, -size/2, size*0.87, size/2,
-                    0, size, -size*0.87, size/2, -size*0.87, -size/2
-                ], card.color);
-                break;
-            case 'square':
-                visual = this.add.rectangle(x, y, size, size, card.color);
-                break;
-            case 'diamond':
-                visual = this.add.polygon(x, y, [0, -size, size, 0, 0, size, -size, 0], card.color);
-                break;
-            case 'circle':
-                visual = this.add.circle(x, y, size/2, card.color);
-                break;
-            case 'plus':
-                const container = this.add.container(x, y);
-                container.add(this.add.rectangle(0, 0, size, size/3, card.color));
-                container.add(this.add.rectangle(0, 0, size/3, size, card.color));
-                visual = container;
-                break;
-            default:
-                visual = this.add.circle(x, y, size/2, card.color);
-        }
+        const shadow = this.add.ellipse(0, size * 0.5, size * 1.2, size * 0.4, 0x000000, 0.25);
+        container.add(shadow);
+        container.shadow = shadow;
         
-        if (visual.setStrokeStyle) {
-            visual.setStrokeStyle(2, isEnemy ? 0xff0000 : 0x0000ff, 0.7);
-        }
-        visual.setDepth(20);
+        const shape = this.add.circle(0, 0, size/2, card.color);
+        shape.setStrokeStyle(2, isEnemy ? 0xff6666 : 0x6688ff, 0.8);
+        container.add(shape);
+        container.sprite = shape;
         
-        return visual;
+        return container;
     }
     
     createUnitHPBar(unit) {
@@ -546,6 +662,9 @@ class GameScene extends Phaser.Scene {
                 this.updateHealerDrone(unit, currentTime);
             }
             
+            let isMoving = false;
+            let moveDir = 0;
+            
             if (unit.target) {
                 const dx = unit.target.x - unit.x;
                 const dy = unit.target.y - unit.y;
@@ -557,6 +676,8 @@ class GameScene extends Phaser.Scene {
                 } else {
                     // Move towards target
                     this.moveUnit(unit, dx / dist, dy / dist, dt);
+                    isMoving = true;
+                    moveDir = dy;
                 }
             } else {
                 // Move towards enemy base
@@ -564,6 +685,19 @@ class GameScene extends Phaser.Scene {
                 const dy = targetY - unit.y;
                 const direction = dy > 0 ? 1 : -1;
                 this.moveUnit(unit, 0, direction, dt);
+                isMoving = true;
+                moveDir = dy;
+            }
+            
+            // Handle walk/idle animation state
+            if (this.characterArt && unit.visual.animState) {
+                if (isMoving && !unit.visual.animState.walking) {
+                    unit.visual.animState.walking = true;
+                    this.characterArt.startWalkAnimation(unit.visual, moveDir);
+                } else if (!isMoving && unit.visual.animState.walking) {
+                    unit.visual.animState.walking = false;
+                    this.characterArt.stopWalkAnimation(unit.visual);
+                }
             }
             
             // Update visual position
@@ -665,6 +799,12 @@ class GameScene extends Phaser.Scene {
         
         unit.lastAttackTime = currentTime;
         
+        // Play attack animation
+        const isMelee = unit.range <= 50;
+        if (this.characterArt && unit.visual.animState) {
+            this.characterArt.playAttackAnimation(unit.visual, isMelee);
+        }
+        
         let damage = unit.damage;
         
         // Check if target has damage reduction
@@ -695,13 +835,19 @@ class GameScene extends Phaser.Scene {
             chainRange: source.stats.chainRange,
             chainDamageFalloff: source.stats.chainDamageFalloff,
             splashRadius: source.stats.splashRadius,
-            chainsRemaining: source.stats.maxChains || 0
+            chainsRemaining: source.stats.maxChains || 0,
+            trail: [],
+            color: source.card.color
         };
         
-        // Create projectile visual
+        // Create projectile visual with glow
         const color = source.card.color;
-        projectile.visual = this.add.circle(source.x, source.y, 5, color);
+        projectile.visual = this.add.circle(source.x, source.y, 6, color);
         projectile.visual.setDepth(25);
+        
+        // Glow effect
+        projectile.glow = this.add.circle(source.x, source.y, 10, color, 0.3);
+        projectile.glow.setDepth(24);
         
         this.projectiles.push(projectile);
     }
@@ -721,6 +867,9 @@ class GameScene extends Phaser.Scene {
                 // Hit target
                 this.dealDamage(proj.target, proj.damage, proj.source);
                 
+                // Hit particles
+                this.createHitParticles(proj.x, proj.y, proj.color);
+                
                 // Chain lightning
                 if (proj.chainLightning && proj.chainsRemaining > 0) {
                     this.chainLightning(proj);
@@ -733,10 +882,24 @@ class GameScene extends Phaser.Scene {
                 
                 proj.destroy = true;
             } else {
+                // Create trail particle
+                if (Math.random() < 0.3) {
+                    const trail = this.add.circle(proj.x, proj.y, 3, proj.color, 0.5);
+                    trail.setDepth(23);
+                    this.tweens.add({
+                        targets: trail,
+                        alpha: 0,
+                        scale: 0.3,
+                        duration: 150,
+                        onComplete: () => trail.destroy()
+                    });
+                }
+                
                 // Move towards target
                 proj.x += (dx / dist) * proj.speed * dt;
                 proj.y += (dy / dist) * proj.speed * dt;
                 proj.visual.setPosition(proj.x, proj.y);
+                if (proj.glow) proj.glow.setPosition(proj.x, proj.y);
             }
         });
     }
@@ -810,8 +973,14 @@ class GameScene extends Phaser.Scene {
         
         target.hp -= damage;
         
+        // Hit flash effect
+        this.createHitFlash(target);
+        
         // Check if it's a tower
         if (target.isCore !== undefined) {
+            // Screen shake on tower hit
+            this.cameras.main.shake(80, 0.005);
+            window.sfx.play('towerHit');
             // Add momentum for tower damage
             const momentumGain = damage / 20;
             if (source.isEnemy) {
@@ -835,7 +1004,8 @@ class GameScene extends Phaser.Scene {
                 target.destroy = true;
             }
         } else {
-            // Unit death
+            // Unit hit/death
+            window.sfx.play('hit');
             if (target.hp <= 0) {
                 this.destroyUnit(target);
             }
@@ -849,15 +1019,23 @@ class GameScene extends Phaser.Scene {
         tower.destroyed = true;
         tower.hp = 0;
         
+        // Big screen shake for tower destruction
+        this.cameras.main.shake(300, 0.015);
+        window.sfx.play('towerDown');
+        
         // Visual destruction
+        const targets = [tower.visual, tower.glow];
+        if (tower.inner) targets.push(tower.inner);
+        
         this.tweens.add({
-            targets: [tower.visual, tower.glow],
+            targets: targets,
             alpha: 0,
             scale: 1.5,
             duration: 500,
             onComplete: () => {
                 tower.visual.destroy();
                 tower.glow.destroy();
+                if (tower.inner) tower.inner.destroy();
                 if (tower.hpBar) {
                     tower.hpBar.container.destroy();
                 }
@@ -874,14 +1052,36 @@ class GameScene extends Phaser.Scene {
     }
     
     destroyUnit(unit) {
-        // Death effect
-        this.createExplosionEffect(unit.x, unit.y, unit.card.color, true);
+        // Death sound
+        window.sfx.play('death');
         
-        // Remove visual
-        unit.visual.destroy();
+        // Use CharacterArt death animation if available
+        if (this.characterArt && unit.visual.animState) {
+            this.characterArt.playDeathAnimation(unit.visual, () => {
+                if (unit.visual) unit.visual.destroy();
+            });
+        } else {
+            // Fallback death effect
+            this.tweens.add({
+                targets: unit.visual,
+                scaleX: 1.5,
+                scaleY: 1.5,
+                alpha: 0,
+                duration: 150,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    if (unit.visual) unit.visual.destroy();
+                }
+            });
+        }
+        
+        // Remove HP bar immediately
         if (unit.hpBar) {
             unit.hpBar.container.destroy();
         }
+        
+        // Particle burst
+        this.createExplosionEffect(unit.x, unit.y, unit.card.color, true);
         
         unit.destroy = true;
     }
@@ -1018,6 +1218,7 @@ class GameScene extends Phaser.Scene {
         this.projectiles = this.projectiles.filter(proj => {
             if (proj.destroy) {
                 proj.visual.destroy();
+                if (proj.glow) proj.glow.destroy();
                 return false;
             }
             return true;
@@ -1219,6 +1420,52 @@ class GameScene extends Phaser.Scene {
             duration: 500,
             onComplete: () => plus.destroy()
         });
+    }
+    
+    createHitFlash(target) {
+        if (!target.visual || target.destroyed) return;
+        
+        // Use CharacterArt hit animation for units with animState
+        if (this.characterArt && target.visual.animState) {
+            this.characterArt.playHitAnimation(target.visual);
+            return;
+        }
+        
+        // Quick white flash for other objects
+        if (target.visual.mainShape && target.visual.mainShape.setTint) {
+            target.visual.mainShape.setTint(0xffffff);
+            this.time.delayedCall(50, () => {
+                if (target.visual && target.visual.mainShape && !target.destroyed) {
+                    target.visual.mainShape.clearTint();
+                }
+            });
+        } else if (target.visual.setTint) {
+            target.visual.setTint(0xffffff);
+            this.time.delayedCall(50, () => {
+                if (target.visual && !target.destroyed) {
+                    target.visual.clearTint();
+                }
+            });
+        }
+    }
+    
+    createHitParticles(x, y, color) {
+        for (let i = 0; i < 4; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 40 + Math.random() * 40;
+            const particle = this.add.circle(x, y, 3, color);
+            particle.setDepth(30);
+            
+            this.tweens.add({
+                targets: particle,
+                x: x + Math.cos(angle) * speed,
+                y: y + Math.sin(angle) * speed,
+                alpha: 0,
+                scale: 0.3,
+                duration: 200,
+                onComplete: () => particle.destroy()
+            });
+        }
     }
 }
 
