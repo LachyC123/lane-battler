@@ -1,5 +1,79 @@
 // main.js - Phaser game configuration and initialization for Lane Storm
 
+class BootScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'BootScene' });
+    }
+
+    create() {
+        // Intentionally empty: we wait for the user to press Play.
+    }
+}
+
+function ensureOverlayDisabled(el) {
+    if (!el) return;
+    el.classList.add('hidden');
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
+}
+
+function showOnScreenError(err) {
+    const message =
+        err instanceof Error ? (err.stack || err.message) : String(err);
+
+    let box = document.getElementById('runtime-error-box');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'runtime-error-box';
+        box.style.position = 'fixed';
+        box.style.left = '12px';
+        box.style.top = '12px';
+        box.style.maxWidth = 'min(720px, calc(100vw - 24px))';
+        box.style.maxHeight = 'min(60vh, calc(100vh - 24px))';
+        box.style.overflow = 'auto';
+        box.style.padding = '12px 14px';
+        box.style.borderRadius = '10px';
+        box.style.border = '2px solid #ff4757';
+        box.style.background = 'rgba(10, 10, 16, 0.92)';
+        box.style.color = '#ffffff';
+        box.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+        box.style.fontSize = '12px';
+        box.style.lineHeight = '1.35';
+        box.style.whiteSpace = 'pre-wrap';
+        box.style.zIndex = '5000';
+        box.style.pointerEvents = 'auto';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.setAttribute('aria-label', 'Close error');
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.right = '8px';
+        closeBtn.style.top = '6px';
+        closeBtn.style.width = '28px';
+        closeBtn.style.height = '28px';
+        closeBtn.style.borderRadius = '50%';
+        closeBtn.style.border = '1px solid rgba(255,255,255,0.25)';
+        closeBtn.style.background = 'rgba(0,0,0,0.35)';
+        closeBtn.style.color = '#fff';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.addEventListener('click', () => box.remove());
+        box.appendChild(closeBtn);
+
+        const pre = document.createElement('div');
+        pre.id = 'runtime-error-text';
+        box.appendChild(pre);
+
+        document.body.appendChild(box);
+    }
+
+    const textEl = box.querySelector('#runtime-error-text');
+    if (textEl) {
+        textEl.textContent = `Startup/runtime error:\n\n${message}`;
+    }
+
+    console.error(err);
+}
+
 // Game configuration
 const config = {
     type: Phaser.AUTO,
@@ -11,7 +85,8 @@ const config = {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
     },
-    scene: [GameScene, UIScene]
+    // BootScene starts first; match only starts after Play.
+    scene: [BootScene, GameScene, UIScene]
 };
 
 // Global game instance
@@ -23,10 +98,25 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeGame();
     setupMenuListeners();
     checkTutorial();
+
+    window.addEventListener('error', (e) => {
+        // Avoid double-reporting if already handled elsewhere.
+        showOnScreenError(e.error || e.message || e);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+        showOnScreenError(e.reason || e);
+    });
 });
 
 function initializeGame() {
-    // Don't start Phaser yet, wait for play button
+    // Boot Phaser immediately so scene transitions on Play are reliable.
+    if (!game) {
+        try {
+            game = new Phaser.Game(config);
+        } catch (err) {
+            showOnScreenError(err);
+        }
+    }
 }
 
 function setupMenuListeners() {
@@ -82,8 +172,9 @@ function closeTutorial() {
 }
 
 function startGame() {
-    // Hide start screen
-    document.getElementById('start-screen').classList.add('hidden');
+    try {
+        // Hide start screen (fully disable it so it cannot block the canvas)
+        ensureOverlayDisabled(document.getElementById('start-screen'));
     
     // Show tutorial on first play
     const hasPlayed = localStorage.getItem('laneStorm_hasPlayed');
@@ -92,25 +183,36 @@ function startGame() {
         showTutorial();
     }
     
-    // Create Phaser game if not exists
-    if (!game) {
-        game = new Phaser.Game(config);
+        // Ensure Phaser is initialized
+        initializeGame();
+
+        // Start the game scene with difficulty
+        if (game) {
+            if (game.scene.isActive('BootScene')) {
+                game.scene.stop('BootScene');
+            }
+            game.scene.start('GameScene', { difficulty: currentDifficulty });
+            // UI runs alongside the match scene
+            game.scene.launch('UIScene');
+        }
+    } catch (err) {
+        showOnScreenError(err);
     }
-    
-    // Start the game scene with difficulty
-    game.scene.start('GameScene', { difficulty: currentDifficulty });
-    game.scene.start('UIScene');
 }
 
 function restartGame() {
-    if (game) {
-        // Stop current scenes
-        game.scene.stop('GameScene');
-        game.scene.stop('UIScene');
-        
-        // Restart with current difficulty
-        game.scene.start('GameScene', { difficulty: currentDifficulty });
-        game.scene.start('UIScene');
+    try {
+        if (game) {
+            // Stop current scenes
+            if (game.scene.isActive('GameScene')) game.scene.stop('GameScene');
+            if (game.scene.isActive('UIScene')) game.scene.stop('UIScene');
+
+            // Restart with current difficulty
+            game.scene.start('GameScene', { difficulty: currentDifficulty });
+            game.scene.launch('UIScene');
+        }
+    } catch (err) {
+        showOnScreenError(err);
     }
 }
 
@@ -126,7 +228,12 @@ function returnToMenu() {
     }
     
     // Show start screen
-    document.getElementById('start-screen').classList.remove('hidden');
+    const startScreen = document.getElementById('start-screen');
+    if (startScreen) {
+        startScreen.classList.remove('hidden');
+        startScreen.style.display = '';
+        startScreen.style.pointerEvents = '';
+    }
 }
 
 // Prevent default touch behaviors for better mobile experience
