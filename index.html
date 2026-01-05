@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lane Storm - A 2D Lane Battler</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <!-- UI Overlays -->
+    <div id="start-screen" class="overlay">
+        <div class="menu-box">
+            <h1>⚡ Lane Storm ⚡</h1>
+            <p class="subtitle">A 2D Lane Battler</p>
+            <div class="difficulty-select">
+                <label>Difficulty:</label>
+                <select id="difficulty-select">
+                    <option value="easy">Easy</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="hard">Hard</option>
+                </select>
+            </div>
+            <button id="play-btn" class="menu-btn">▶ PLAY</button>
+        </div>
+    </div>
+    
+    <div id="game-over-screen" class="overlay hidden">
+        <div class="menu-box">
+            <h1 id="game-result">Victory!</h1>
+            <p id="game-result-detail"></p>
+            <button id="rematch-btn" class="menu-btn">🔄 REMATCH</button>
+            <button id="menu-btn" class="menu-btn secondary">📋 MENU</button>
+        </div>
+    </div>
+    
+    <div id="tutorial-overlay" class="overlay hidden">
+        <div class="tutorial-box">
+            <h2>How to Play</h2>
+            <div class="tutorial-content">
+                <p><strong>🎯 Objective:</strong> Destroy the enemy Core Tower or have more tower HP when time runs out!</p>
+                <p><strong>🃏 Cards:</strong> Tap a card, then tap your half of the field to deploy. Or drag cards directly!</p>
+                <p><strong>💧 Elixir:</strong> Regenerates over time. Costs shown on cards. After 1:15, regen doubles!</p>
+                <p><strong>⚡ Momentum:</strong> Damages towers fill your meter. When full, choose:</p>
+                <ul>
+                    <li><strong>⚔️ Fury:</strong> +50% attack speed for 5s</li>
+                    <li><strong>🛡️ Fortify:</strong> 50% damage reduction for 5s</li>
+                </ul>
+                <p><strong>🏰 Towers:</strong> Lane towers guard each lane. Core tower is your main target!</p>
+            </div>
+            <label class="checkbox-label">
+                <input type="checkbox" id="dont-show-tutorial">
+                Don't show this again
+            </label>
+            <button id="tutorial-close-btn" class="menu-btn">Got it!</button>
+        </div>
+    </div>
+    
+    <div id="momentum-choice" class="overlay hidden">
+        <div class="momentum-box">
+            <h2>⚡ MOMENTUM READY! ⚡</h2>
+            <p>Choose your power-up:</p>
+            <div class="momentum-buttons">
+                <button id="fury-btn" class="momentum-btn fury">⚔️ FURY<br><small>+50% Attack Speed</small></button>
+                <button id="fortify-btn" class="momentum-btn fortify">🛡️ FORTIFY<br><small>50% Damage Reduction</small></button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Load game scripts -->
+    <script src="src/cards.js"></script>
+    <script src="src/ai.js"></script>
+    <script src="src/ui.js"></script>
+    <script src="src/game.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
