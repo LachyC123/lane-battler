@@ -929,8 +929,12 @@ class GameScene extends Phaser.Scene {
                 currentDamage *= proj.chainDamageFalloff;
                 this.dealDamage(nextTarget, currentDamage, proj.source);
                 
-                // Lightning effect
-                this.createLightningEffect(currentTarget.x, currentTarget.y, nextTarget.x, nextTarget.y);
+                // Lightning effect (use CharacterArt if available)
+                if (this.characterArt) {
+                    this.characterArt.createChainLightning(currentTarget.x, currentTarget.y, nextTarget.x, nextTarget.y);
+                } else {
+                    this.createLightningEffect(currentTarget.x, currentTarget.y, nextTarget.x, nextTarget.y);
+                }
                 
                 alreadyHit.push(nextTarget);
                 currentTarget = nextTarget;
@@ -953,8 +957,12 @@ class GameScene extends Phaser.Scene {
             }
         });
         
-        // Splash effect
-        this.createSplashEffect(x, y, radius);
+        // Splash effect (bomb explosion for bomber bug)
+        if (this.characterArt && source.card && source.card.id === 'bomberBug') {
+            this.characterArt.createBombExplosion(x, y);
+        } else {
+            this.createSplashEffect(x, y, radius);
+        }
     }
     
     dealDamage(target, damage, source) {
@@ -1406,8 +1414,11 @@ class GameScene extends Phaser.Scene {
     }
     
     createHealEffect(x, y) {
+        // Plus symbol
         const plus = this.add.text(x, y, '+', {
-            fontSize: '20px',
+            fontSize: '18px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
             color: '#44ffaa'
         });
         plus.setOrigin(0.5);
@@ -1415,10 +1426,26 @@ class GameScene extends Phaser.Scene {
         
         this.tweens.add({
             targets: plus,
-            y: y - 20,
+            y: y - 25,
             alpha: 0,
-            duration: 500,
+            scale: 1.3,
+            duration: 600,
+            ease: 'Quad.easeOut',
             onComplete: () => plus.destroy()
+        });
+        
+        // Small heal ring
+        const ring = this.add.circle(x, y, 6, 0x44ffaa, 0);
+        ring.setStrokeStyle(2, 0x44ffaa, 0.7);
+        ring.setDepth(28);
+        
+        this.tweens.add({
+            targets: ring,
+            scale: 2.5,
+            alpha: 0,
+            duration: 400,
+            ease: 'Quad.easeOut',
+            onComplete: () => ring.destroy()
         });
     }
     
