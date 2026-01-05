@@ -14,7 +14,12 @@ class CharacterArt {
         
         teams.forEach(team => {
             unitTypes.forEach(type => {
-                this.generateUnitTexture(type, team);
+                try {
+                    this.generateUnitTexture(type, team);
+                } catch (err) {
+                    console.error(`[CharacterArt] Failed generating texture ${team}_${type}`, err);
+                    this.generateFallbackUnitTexture(type, team);
+                }
             });
         });
     }
@@ -54,21 +59,70 @@ class CharacterArt {
         const g = this.scene.add.graphics();
         const c = this.getUnitColors(unitType, team === 'enemy');
         const cx = size / 2, cy = size / 2;
-        
-        // Draw character based on type
-        switch (unitType) {
-            case 'runner': this.drawRunner(g, cx, cy, c); break;
-            case 'guardian': this.drawGuardian(g, cx, cy, c); break;
-            case 'slingbot': this.drawSlingbot(g, cx, cy, c); break;
-            case 'sparkMage': this.drawSparkMage(g, cx, cy, c); break;
-            case 'bomberBug': this.drawBomberBug(g, cx, cy, c); break;
-            case 'healerDrone': this.drawHealerDrone(g, cx, cy, c); break;
+
+        try {
+            // Draw character based on type
+            switch (unitType) {
+                case 'runner': this.drawRunner(g, cx, cy, c); break;
+                case 'guardian': this.drawGuardian(g, cx, cy, c); break;
+                case 'slingbot': this.drawSlingbot(g, cx, cy, c); break;
+                case 'sparkMage': this.drawSparkMage(g, cx, cy, c); break;
+                case 'bomberBug': this.drawBomberBug(g, cx, cy, c); break;
+                case 'healerDrone': this.drawHealerDrone(g, cx, cy, c); break;
+                default:
+                    this.drawFallback(g, cx, cy, c);
+                    break;
+            }
+
+            g.generateTexture(key, size, size);
+            this.textureCache[key] = true;
+            return key;
+        } catch (err) {
+            console.error(`[CharacterArt] Texture generation failed for ${key}`, err);
+            return this.generateFallbackUnitTexture(unitType, team, err);
+        } finally {
+            g.destroy();
         }
-        
-        g.generateTexture(key, size, size);
-        g.destroy();
-        this.textureCache[key] = true;
-        return key;
+    }
+
+    generateFallbackUnitTexture(unitType, team, err) {
+        const key = `${team}_${unitType}`;
+        if (this.scene.textures.exists(key)) return key;
+
+        const size = 80;
+        const g = this.scene.add.graphics();
+        const c = this.getUnitColors(unitType, team === 'enemy');
+        const cx = size / 2, cy = size / 2;
+
+        try {
+            this.drawFallback(g, cx, cy, c, err);
+            g.generateTexture(key, size, size);
+            this.textureCache[key] = true;
+            return key;
+        } catch (fallbackErr) {
+            console.error(`[CharacterArt] Fallback texture generation failed for ${key}`, fallbackErr);
+            // Last-resort: still return the key so callers don't crash; the texture may be missing.
+            return key;
+        } finally {
+            g.destroy();
+        }
+    }
+
+    drawFallback(g, cx, cy, c) {
+        const outline = 0x1a1a2e;
+        // Simple generic character placeholder (keeps match running if a unit art draw breaks)
+        g.fillStyle(c.primary, 1);
+        g.fillCircle(cx, cy + 4, 18);
+
+        g.fillStyle(c.secondary, 0.5);
+        g.fillCircle(cx - 5, cy, 6);
+
+        g.fillStyle(c.accent?.main ?? 0xff00ff, 0.9);
+        g.fillCircle(cx, cy - 14, 10);
+
+        g.lineStyle(3, outline, 1);
+        g.strokeCircle(cx, cy - 14, 10);
+        g.strokeCircle(cx, cy + 4, 18);
     }
     
     // === CHARACTER DRAWING ===
@@ -465,7 +519,7 @@ class CharacterArt {
         g.beginPath();
         g.moveTo(cx - 14, cy - 6);
         g.lineTo(cx - 18, cy + 24);
-        g.quadraticCurveTo(cx, cy + 28, cx + 18, cy + 24);
+        g.quadraticBezierTo(cx, cy + 28, cx + 18, cy + 24);
         g.lineTo(cx + 14, cy - 6);
         g.closePath();
         g.fillPath();
@@ -475,7 +529,7 @@ class CharacterArt {
         g.beginPath();
         g.moveTo(cx - 6, cy);
         g.lineTo(cx - 10, cy + 22);
-        g.quadraticCurveTo(cx, cy + 24, cx + 10, cy + 22);
+        g.quadraticBezierTo(cx, cy + 24, cx + 10, cy + 22);
         g.lineTo(cx + 6, cy);
         g.closePath();
         g.fillPath();
@@ -508,7 +562,7 @@ class CharacterArt {
         g.fillStyle(c.primary, 1);
         g.beginPath();
         g.moveTo(cx - 14, cy - 8);
-        g.quadraticCurveTo(cx, cy - 32, cx + 14, cy - 8);
+        g.quadraticBezierTo(cx, cy - 32, cx + 14, cy - 8);
         g.lineTo(cx + 12, cy);
         g.lineTo(cx - 12, cy);
         g.closePath();
@@ -518,7 +572,7 @@ class CharacterArt {
         g.fillStyle(c.dark, 0.8);
         g.beginPath();
         g.moveTo(cx - 10, cy - 6);
-        g.quadraticCurveTo(cx, cy - 24, cx + 10, cy - 6);
+        g.quadraticBezierTo(cx, cy - 24, cx + 10, cy - 6);
         g.lineTo(cx + 8, cy - 2);
         g.lineTo(cx - 8, cy - 2);
         g.closePath();
@@ -528,7 +582,7 @@ class CharacterArt {
         g.fillStyle(c.secondary, 0.3);
         g.beginPath();
         g.moveTo(cx - 12, cy - 10);
-        g.quadraticCurveTo(cx - 6, cy - 26, cx, cy - 26);
+        g.quadraticBezierTo(cx - 6, cy - 26, cx, cy - 26);
         g.lineTo(cx - 4, cy - 10);
         g.closePath();
         g.fillPath();
@@ -584,7 +638,7 @@ class CharacterArt {
         g.lineStyle(2.5, outline, 1);
         g.beginPath();
         g.moveTo(cx - 14, cy - 8);
-        g.quadraticCurveTo(cx, cy - 32, cx + 14, cy - 8);
+        g.quadraticBezierTo(cx, cy - 32, cx + 14, cy - 8);
         g.strokePath();
     }
     
@@ -595,11 +649,11 @@ class CharacterArt {
         g.lineStyle(3, c.dark, 1);
         g.beginPath();
         g.moveTo(cx - 6, cy - 22);
-        g.quadraticCurveTo(cx - 10, cy - 32, cx - 8, cy - 36);
+        g.quadraticBezierTo(cx - 10, cy - 32, cx - 8, cy - 36);
         g.strokePath();
         g.beginPath();
         g.moveTo(cx + 6, cy - 22);
-        g.quadraticCurveTo(cx + 10, cy - 32, cx + 8, cy - 36);
+        g.quadraticBezierTo(cx + 10, cy - 32, cx + 8, cy - 36);
         g.strokePath();
         
         // Antenna tips
@@ -650,7 +704,7 @@ class CharacterArt {
         g.lineStyle(2, 0x665544, 1);
         g.beginPath();
         g.moveTo(cx, cy + 1);
-        g.quadraticCurveTo(cx + 4, cy - 4, cx + 2, cy - 8);
+        g.quadraticBezierTo(cx + 4, cy - 4, cx + 2, cy - 8);
         g.strokePath();
         
         // Fuse spark
