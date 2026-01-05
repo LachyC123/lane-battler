@@ -9,93 +9,105 @@ class UIScene extends Phaser.Scene {
         this.gameScene = this.scene.get('GameScene');
         
         // UI dimensions
-        this.hudHeight = 100;
-        this.cardWidth = 70;
-        this.cardHeight = 90;
+        this.hudHeight = 110;
+        this.cardWidth = 64;
+        this.cardHeight = 85;
         
-        // Create HUD background
+        // Colors
+        this.colors = {
+            hudBg: 0x0f1523,
+            hudBorder: 0x4a90d9,
+            cardBg: 0x1a2744,
+            cardBgAfford: 0x243656,
+            cardBorder: 0x3a5a8a,
+            cardSelected: 0x50c878,
+            elixirBg: 0x1a1a2e,
+            elixirFill: 0x9b59b6,
+            elixirTick: 0x2a2a4e,
+            momentumFill: 0xffd700,
+            towerHpPlayer: 0x4ecdc4,
+            towerHpEnemy: 0xff6b6b
+        };
+        
+        // Create HUD elements
         this.createHUDBackground();
-        
-        // Create timer display
         this.createTimer();
-        
-        // Create elixir bar
         this.createElixirBar();
-        
-        // Create momentum meter
         this.createMomentumMeter();
-        
-        // Create card hand display
         this.createCardHand();
-        
-        // Create tower HP displays
         this.createTowerHPDisplays();
-        
-        // Set up event listeners
         this.setupEventListeners();
         
         // Selected card tracking
         this.selectedCardIndex = -1;
-        this.selectedCardVisual = null;
         this.dragCard = null;
         
         // Create placement preview
         this.createPlacementPreview();
+        
+        // Momentum glow animation
+        this.momentumGlowTween = null;
     }
     
     createHUDBackground() {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
         
-        // Bottom HUD bar
+        // Main HUD background with gradient effect
         this.hudBg = this.add.rectangle(
             width / 2,
             height - this.hudHeight / 2,
             width,
             this.hudHeight,
-            0x1a1a2e,
-            0.95
+            this.colors.hudBg,
+            0.98
         );
         this.hudBg.setDepth(100);
         
-        // HUD border
-        this.hudBorder = this.add.rectangle(
+        // Top accent line
+        this.hudAccent = this.add.rectangle(
             width / 2,
             height - this.hudHeight,
             width,
             3,
-            0x4a90d9
+            this.colors.hudBorder
         );
-        this.hudBorder.setDepth(101);
+        this.hudAccent.setDepth(101);
+        
+        // Subtle inner glow
+        const glowGraphics = this.add.graphics();
+        glowGraphics.fillGradientStyle(0x4a90d9, 0x4a90d9, 0x0f1523, 0x0f1523, 0.15, 0.15, 0, 0);
+        glowGraphics.fillRect(0, height - this.hudHeight, width, 20);
+        glowGraphics.setDepth(100);
     }
     
     createTimer() {
-        this.timerText = this.add.text(
-            this.cameras.main.width / 2,
-            20,
-            '2:30',
-            {
-                fontSize: '28px',
-                fontFamily: 'Arial',
-                color: '#ffffff',
-                stroke: '#000000',
-                strokeThickness: 3
-            }
-        );
+        const centerX = this.cameras.main.width / 2;
+        
+        // Timer background pill
+        this.timerBg = this.add.graphics();
+        this.timerBg.fillStyle(0x0f1523, 0.8);
+        this.timerBg.fillRoundedRect(centerX - 50, 8, 100, 36, 18);
+        this.timerBg.lineStyle(2, 0x4a90d9, 0.6);
+        this.timerBg.strokeRoundedRect(centerX - 50, 8, 100, 36, 18);
+        this.timerBg.setDepth(100);
+        
+        this.timerText = this.add.text(centerX, 26, '2:30', {
+            fontSize: '22px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff'
+        });
         this.timerText.setOrigin(0.5);
         this.timerText.setDepth(101);
         
         // Double elixir indicator
-        this.doubleElixirText = this.add.text(
-            this.cameras.main.width / 2,
-            48,
-            '⚡ DOUBLE ELIXIR ⚡',
-            {
-                fontSize: '14px',
-                fontFamily: 'Arial',
-                color: '#ffd700'
-            }
-        );
+        this.doubleElixirText = this.add.text(centerX, 52, '⚡ 2X ELIXIR ⚡', {
+            fontSize: '11px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffd700'
+        });
         this.doubleElixirText.setOrigin(0.5);
         this.doubleElixirText.setDepth(101);
         this.doubleElixirText.setVisible(false);
@@ -103,238 +115,196 @@ class UIScene extends Phaser.Scene {
     
     createElixirBar() {
         const height = this.cameras.main.height;
-        const barWidth = 200;
-        const barHeight = 20;
-        const startX = 20;
-        const startY = height - 30;
+        const barWidth = 180;
+        const barHeight = 24;
+        const startX = 16;
+        const startY = height - this.hudHeight + 32;
         
-        // Background
-        this.elixirBg = this.add.rectangle(
-            startX + barWidth / 2,
-            startY,
-            barWidth,
-            barHeight,
-            0x333333
-        );
-        this.elixirBg.setDepth(102);
+        // Container for elixir elements
+        this.elixirContainer = this.add.container(startX, startY);
+        this.elixirContainer.setDepth(102);
         
-        // Fill bar
+        // Elixir icon
+        const icon = this.add.text(-2, 0, '💧', { fontSize: '18px' });
+        icon.setOrigin(0.5);
+        this.elixirContainer.add(icon);
+        
+        // Background with rounded corners
+        const bgGraphics = this.add.graphics();
+        bgGraphics.fillStyle(0x1a1a2e, 1);
+        bgGraphics.fillRoundedRect(12, -barHeight/2, barWidth, barHeight, 6);
+        bgGraphics.lineStyle(2, 0x3a3a5e, 1);
+        bgGraphics.strokeRoundedRect(12, -barHeight/2, barWidth, barHeight, 6);
+        this.elixirContainer.add(bgGraphics);
+        
+        // Tick marks for each elixir point
+        const tickGraphics = this.add.graphics();
+        tickGraphics.lineStyle(1, 0x4a4a6e, 0.5);
+        for (let i = 1; i < 10; i++) {
+            const tickX = 12 + (barWidth / 10) * i;
+            tickGraphics.lineBetween(tickX, -barHeight/2 + 4, tickX, barHeight/2 - 4);
+        }
+        this.elixirContainer.add(tickGraphics);
+        
+        // Fill bar (will be updated)
         this.elixirFill = this.add.rectangle(
-            startX + 2,
-            startY,
-            0,
-            barHeight - 4,
-            0x9b59b6
+            14, 0, 0, barHeight - 6, this.colors.elixirFill
         );
         this.elixirFill.setOrigin(0, 0.5);
-        this.elixirFill.setDepth(103);
+        this.elixirContainer.add(this.elixirFill);
         
-        // Border
-        this.elixirBorder = this.add.rectangle(
-            startX + barWidth / 2,
-            startY,
-            barWidth,
-            barHeight,
-            0x4a90d9
+        // Shine effect on fill
+        this.elixirShine = this.add.rectangle(
+            14, -barHeight/4, 0, barHeight/4, 0xffffff, 0.15
         );
-        this.elixirBorder.setStrokeStyle(2, 0x4a90d9);
-        this.elixirBorder.setFillStyle();
-        this.elixirBorder.setDepth(104);
+        this.elixirShine.setOrigin(0, 0.5);
+        this.elixirContainer.add(this.elixirShine);
         
-        // Text
-        this.elixirText = this.add.text(
-            startX + barWidth / 2,
-            startY,
-            '5/10',
-            {
-                fontSize: '14px',
-                fontFamily: 'Arial',
-                color: '#ffffff',
-                stroke: '#000000',
-                strokeThickness: 2
-            }
-        );
+        // Text overlay
+        this.elixirText = this.add.text(12 + barWidth/2, 0, '5', {
+            fontSize: '16px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff'
+        });
         this.elixirText.setOrigin(0.5);
-        this.elixirText.setDepth(105);
+        this.elixirContainer.add(this.elixirText);
         
-        // Icon
-        this.add.text(startX - 15, startY, '💧', { fontSize: '16px' })
-            .setOrigin(0.5)
-            .setDepth(105);
+        this.elixirBarWidth = barWidth - 4;
     }
     
     createMomentumMeter() {
         const height = this.cameras.main.height;
         const width = this.cameras.main.width;
-        const barWidth = 150;
-        const barHeight = 16;
-        const startX = width - 170;
-        const startY = height - 30;
+        const barWidth = 130;
+        const barHeight = 20;
+        const startX = width - barWidth - 24;
+        const startY = height - this.hudHeight + 32;
+        
+        this.momentumContainer = this.add.container(startX, startY);
+        this.momentumContainer.setDepth(102);
+        
+        // Label
+        const label = this.add.text(barWidth/2, -16, '⚡ MOMENTUM', {
+            fontSize: '10px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffd700'
+        });
+        label.setOrigin(0.5);
+        this.momentumContainer.add(label);
         
         // Background
-        this.momentumBg = this.add.rectangle(
-            startX + barWidth / 2,
-            startY,
-            barWidth,
-            barHeight,
-            0x333333
-        );
-        this.momentumBg.setDepth(102);
+        const bgGraphics = this.add.graphics();
+        bgGraphics.fillStyle(0x1a1a2e, 1);
+        bgGraphics.fillRoundedRect(0, -barHeight/2, barWidth, barHeight, 5);
+        bgGraphics.lineStyle(2, 0x5a5a3e, 1);
+        bgGraphics.strokeRoundedRect(0, -barHeight/2, barWidth, barHeight, 5);
+        this.momentumContainer.add(bgGraphics);
         
         // Fill bar
         this.momentumFill = this.add.rectangle(
-            startX + 2,
-            startY,
-            0,
-            barHeight - 4,
-            0xffd700
+            2, 0, 0, barHeight - 4, this.colors.momentumFill
         );
         this.momentumFill.setOrigin(0, 0.5);
-        this.momentumFill.setDepth(103);
+        this.momentumContainer.add(this.momentumFill);
         
-        // Border
-        this.momentumBorder = this.add.rectangle(
-            startX + barWidth / 2,
-            startY,
-            barWidth,
-            barHeight,
-            0xffd700
+        // Glow overlay (for full momentum)
+        this.momentumGlow = this.add.rectangle(
+            barWidth/2, 0, barWidth, barHeight, 0xffd700, 0
         );
-        this.momentumBorder.setStrokeStyle(2, 0xffd700);
-        this.momentumBorder.setFillStyle();
-        this.momentumBorder.setDepth(104);
+        this.momentumContainer.add(this.momentumGlow);
         
-        // Text
-        this.momentumText = this.add.text(
-            startX + barWidth / 2,
-            startY,
-            '0%',
-            {
-                fontSize: '12px',
-                fontFamily: 'Arial',
-                color: '#ffffff',
-                stroke: '#000000',
-                strokeThickness: 2
-            }
-        );
+        // Percentage text
+        this.momentumText = this.add.text(barWidth/2, 0, '0%', {
+            fontSize: '12px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff'
+        });
         this.momentumText.setOrigin(0.5);
-        this.momentumText.setDepth(105);
+        this.momentumContainer.add(this.momentumText);
         
-        // Label
-        this.add.text(startX + barWidth / 2, startY - 14, '⚡ MOMENTUM', {
-            fontSize: '10px',
-            fontFamily: 'Arial',
-            color: '#ffd700'
-        }).setOrigin(0.5).setDepth(105);
-        
-        // Active buff indicator
-        this.buffIndicator = this.add.text(
-            startX + barWidth / 2,
-            startY + 18,
-            '',
-            {
-                fontSize: '12px',
-                fontFamily: 'Arial',
-                color: '#ffffff'
-            }
-        );
+        // Buff indicator below
+        this.buffIndicator = this.add.text(barWidth/2, 20, '', {
+            fontSize: '11px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff'
+        });
         this.buffIndicator.setOrigin(0.5);
-        this.buffIndicator.setDepth(105);
+        this.momentumContainer.add(this.buffIndicator);
+        
+        this.momentumBarWidth = barWidth - 4;
     }
     
     createCardHand() {
         const height = this.cameras.main.height;
         const width = this.cameras.main.width;
-        const startX = 240;
-        const cardY = height - 55;
+        const totalCardsWidth = 4 * this.cardWidth + 3 * 8;
+        const startX = (width - totalCardsWidth) / 2 + this.cardWidth / 2;
+        const cardY = height - 54;
         
         this.cardSlots = [];
-        this.cardGraphics = [];
+        this.cardContainers = [];
         
         for (let i = 0; i < 4; i++) {
-            const x = startX + i * (this.cardWidth + 10);
+            const x = startX + i * (this.cardWidth + 8);
             
-            // Card background/slot
-            const slot = this.add.rectangle(
-                x, cardY,
-                this.cardWidth, this.cardHeight,
-                0x2a2a4e
-            );
-            slot.setStrokeStyle(2, 0x4a90d9);
-            slot.setDepth(102);
-            slot.setInteractive();
-            slot.cardIndex = i;
+            // Card container
+            const container = this.add.container(x, cardY);
+            container.setDepth(103);
+            container.setSize(this.cardWidth, this.cardHeight);
+            container.setInteractive();
+            container.cardIndex = i;
             
-            this.cardSlots.push(slot);
-            
-            // Card content container
-            const cardContainer = this.add.container(x, cardY);
-            cardContainer.setDepth(103);
-            this.cardGraphics.push(cardContainer);
+            this.cardSlots.push(container);
+            this.cardContainers.push(container);
         }
         
-        // Next card indicator
-        const nextX = startX + 4 * (this.cardWidth + 10) + 30;
-        this.nextCardLabel = this.add.text(
-            nextX, cardY - 35,
-            'NEXT',
-            {
-                fontSize: '10px',
-                fontFamily: 'Arial',
-                color: '#aaaaaa'
-            }
-        );
+        // Next card
+        const nextX = startX + 4 * (this.cardWidth + 8) + 20;
+        
+        this.nextCardLabel = this.add.text(nextX, cardY - 38, 'NEXT', {
+            fontSize: '9px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#6a7a8a',
+            letterSpacing: 1
+        });
         this.nextCardLabel.setOrigin(0.5);
         this.nextCardLabel.setDepth(105);
-        
-        this.nextCardSlot = this.add.rectangle(
-            nextX, cardY,
-            this.cardWidth * 0.7, this.cardHeight * 0.7,
-            0x1a1a2e
-        );
-        this.nextCardSlot.setStrokeStyle(2, 0x666666);
-        this.nextCardSlot.setDepth(102);
         
         this.nextCardContainer = this.add.container(nextX, cardY);
         this.nextCardContainer.setDepth(103);
     }
     
     createTowerHPDisplays() {
-        // These will be positioned by the game scene
-        this.towerHPBars = {
-            playerCore: null,
-            playerTop: null,
-            playerBottom: null,
-            aiCore: null,
-            aiTop: null,
-            aiBottom: null
-        };
+        this.towerHPBars = {};
     }
     
     createPlacementPreview() {
-        this.placementPreview = this.add.circle(0, 0, 20, 0x44ff44, 0.3);
-        this.placementPreview.setStrokeStyle(2, 0x44ff44);
-        this.placementPreview.setVisible(false);
+        this.placementPreview = this.add.container(0, 0);
         this.placementPreview.setDepth(50);
+        
+        const ring = this.add.circle(0, 0, 24, 0x50c878, 0);
+        ring.setStrokeStyle(3, 0x50c878, 0.8);
+        this.placementPreview.add(ring);
+        
+        const innerRing = this.add.circle(0, 0, 16, 0x50c878, 0.2);
+        this.placementPreview.add(innerRing);
+        
+        this.placementPreview.setVisible(false);
     }
     
     setupEventListeners() {
-        // Card slot interactions
-        this.cardSlots.forEach((slot, index) => {
-            slot.on('pointerdown', () => this.onCardClick(index));
+        this.cardSlots.forEach((container, index) => {
+            container.on('pointerdown', () => this.onCardClick(index));
         });
         
-        // Game field interaction
         this.input.on('pointerdown', (pointer) => this.onFieldClick(pointer));
         this.input.on('pointermove', (pointer) => this.onPointerMove(pointer));
         this.input.on('pointerup', (pointer) => this.onPointerUp(pointer));
-        
-        // Drag handling
-        this.input.on('dragstart', (pointer, gameObject) => {
-            if (gameObject.cardIndex !== undefined) {
-                this.startDrag(gameObject.cardIndex, pointer);
-            }
-        });
     }
     
     onCardClick(index) {
@@ -343,13 +313,11 @@ class UIScene extends Phaser.Scene {
         const card = this.gameScene.playerDeck.getHandCards()[index];
         if (!card) return;
         
-        // Check if can afford
         if (!this.gameScene.playerDeck.canAfford(index, this.gameScene.playerElixir)) {
             this.flashCardRed(index);
             return;
         }
         
-        // Toggle selection
         if (this.selectedCardIndex === index) {
             this.deselectCard();
         } else {
@@ -361,25 +329,25 @@ class UIScene extends Phaser.Scene {
         this.deselectCard();
         this.selectedCardIndex = index;
         
-        // Visual feedback
-        this.cardSlots[index].setStrokeStyle(3, 0x44ff44);
-        
-        // Scale up
+        // Animate selection
         this.tweens.add({
-            targets: [this.cardSlots[index], this.cardGraphics[index]],
-            scaleX: 1.1,
-            scaleY: 1.1,
-            duration: 100
+            targets: this.cardContainers[index],
+            y: this.cardContainers[index].y - 12,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            duration: 100,
+            ease: 'Back.easeOut'
         });
     }
     
     deselectCard() {
         if (this.selectedCardIndex >= 0) {
-            const slot = this.cardSlots[this.selectedCardIndex];
-            slot.setStrokeStyle(2, 0x4a90d9);
+            const container = this.cardContainers[this.selectedCardIndex];
+            const originalY = this.cameras.main.height - 54;
             
             this.tweens.add({
-                targets: [slot, this.cardGraphics[this.selectedCardIndex]],
+                targets: container,
+                y: originalY,
                 scaleX: 1,
                 scaleY: 1,
                 duration: 100
@@ -390,39 +358,20 @@ class UIScene extends Phaser.Scene {
     }
     
     flashCardRed(index) {
-        const slot = this.cardSlots[index];
-        slot.setStrokeStyle(3, 0xff4444);
-        this.time.delayedCall(200, () => {
-            if (this.selectedCardIndex !== index) {
-                slot.setStrokeStyle(2, 0x4a90d9);
-            }
+        const container = this.cardContainers[index];
+        
+        this.tweens.add({
+            targets: container,
+            x: container.x - 4,
+            duration: 50,
+            yoyo: true,
+            repeat: 2
         });
     }
     
-    startDrag(cardIndex, pointer) {
-        if (!this.gameScene || !this.gameScene.playerDeck) return;
-        
-        const card = this.gameScene.playerDeck.getHandCards()[cardIndex];
-        if (!card) return;
-        
-        if (!this.gameScene.playerDeck.canAfford(cardIndex, this.gameScene.playerElixir)) {
-            this.flashCardRed(cardIndex);
-            return;
-        }
-        
-        this.dragCard = {
-            index: cardIndex,
-            card: card
-        };
-        
-        this.selectCard(cardIndex);
-    }
-    
     onPointerMove(pointer) {
-        if (this.selectedCardIndex >= 0 || this.dragCard) {
-            const inPlacementArea = this.isValidPlacement(pointer.x, pointer.y);
-            
-            if (inPlacementArea) {
+        if (this.selectedCardIndex >= 0) {
+            if (this.isValidPlacement(pointer.x, pointer.y)) {
                 this.placementPreview.setPosition(pointer.x, pointer.y);
                 this.placementPreview.setVisible(true);
             } else {
@@ -442,7 +391,6 @@ class UIScene extends Phaser.Scene {
     }
     
     onFieldClick(pointer) {
-        // Ignore clicks on HUD
         if (pointer.y > this.cameras.main.height - this.hudHeight) {
             return;
         }
@@ -457,64 +405,69 @@ class UIScene extends Phaser.Scene {
     
     isValidPlacement(x, y) {
         if (!this.gameScene) return false;
-        
         const height = this.cameras.main.height;
         const midY = (height - this.hudHeight) / 2;
-        
-        // Player can only place on their half (bottom)
         return y > midY && y < height - this.hudHeight - 10;
     }
     
     placeCard(cardIndex, x, y) {
         if (!this.gameScene) return;
-        
-        // Determine lane based on x position
         const width = this.cameras.main.width;
         const lane = x < width / 2 ? 'top' : 'bottom';
-        
         this.gameScene.playerPlayCard(cardIndex, x, y, lane);
     }
     
     updateHUD(gameState) {
         if (!gameState) return;
         
-        // Update timer
+        // Timer
         const minutes = Math.floor(gameState.timeRemaining / 60);
         const seconds = Math.floor(gameState.timeRemaining % 60);
         this.timerText.setText(`${minutes}:${seconds.toString().padStart(2, '0')}`);
         
-        // Flash timer when low
         if (gameState.timeRemaining <= 30) {
-            this.timerText.setColor('#ff4444');
+            this.timerText.setColor('#ff4757');
         } else if (gameState.timeRemaining <= 60) {
-            this.timerText.setColor('#ffaa00');
+            this.timerText.setColor('#ffa502');
         } else {
             this.timerText.setColor('#ffffff');
         }
         
-        // Double elixir indicator
         this.doubleElixirText.setVisible(gameState.doubleElixir);
         
-        // Update elixir bar
+        // Elixir bar with smooth animation
         const elixirPercent = gameState.playerElixir / 10;
-        this.elixirFill.width = (200 - 4) * elixirPercent;
-        this.elixirText.setText(`${Math.floor(gameState.playerElixir)}/10`);
+        const targetWidth = this.elixirBarWidth * elixirPercent;
+        this.elixirFill.width = targetWidth;
+        this.elixirShine.width = targetWidth;
+        this.elixirText.setText(Math.floor(gameState.playerElixir).toString());
         
-        // Update momentum meter
+        // Momentum meter
         const momentumPercent = gameState.playerMomentum / 100;
-        this.momentumFill.width = (150 - 4) * momentumPercent;
+        this.momentumFill.width = this.momentumBarWidth * momentumPercent;
         this.momentumText.setText(`${Math.floor(gameState.playerMomentum)}%`);
         
-        // Glow effect when momentum is full
+        // Glow when full
         if (gameState.playerMomentum >= 100) {
-            this.momentumFill.setFillStyle(0xffff00);
-            this.momentumBorder.setStrokeStyle(3, 0xffff00);
+            if (!this.momentumGlowTween) {
+                this.momentumGlow.setAlpha(0.3);
+                this.momentumGlowTween = this.tweens.add({
+                    targets: this.momentumGlow,
+                    alpha: 0,
+                    duration: 500,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
         } else {
-            this.momentumFill.setFillStyle(0xffd700);
-            this.momentumBorder.setStrokeStyle(2, 0xffd700);
+            if (this.momentumGlowTween) {
+                this.momentumGlowTween.stop();
+                this.momentumGlowTween = null;
+                this.momentumGlow.setAlpha(0);
+            }
         }
         
-        // Update buff indicator
+        // Buff indicator
         if (gameState.playerBuff) {
             const remaining = Math.ceil(gameState.playerBuffRemaining / 1000);
             if (gameState.playerBuff === 'fury') {
@@ -528,7 +481,6 @@ class UIScene extends Phaser.Scene {
             this.buffIndicator.setText('');
         }
         
-        // Update cards
         this.updateCardDisplay(gameState);
     }
     
@@ -538,130 +490,184 @@ class UIScene extends Phaser.Scene {
         const hand = this.gameScene.playerDeck.getHandCards();
         const nextCard = this.gameScene.playerDeck.getNextCard();
         
-        // Update hand cards
         hand.forEach((card, index) => {
-            this.updateSingleCard(
-                this.cardGraphics[index],
+            this.renderCard(
+                this.cardContainers[index],
                 card,
-                this.gameScene.playerDeck.canAfford(index, gameState.playerElixir)
+                this.gameScene.playerDeck.canAfford(index, gameState.playerElixir),
+                index === this.selectedCardIndex
             );
         });
         
-        // Update next card
         if (nextCard) {
-            this.updateSingleCard(this.nextCardContainer, nextCard, false, true);
+            this.renderCard(this.nextCardContainer, nextCard, false, false, true);
         }
     }
     
-    updateSingleCard(container, card, canAfford, isSmall = false) {
-        // Clear existing graphics
+    renderCard(container, card, canAfford, isSelected, isSmall = false) {
         container.removeAll(true);
         
-        const scale = isSmall ? 0.7 : 1;
+        const scale = isSmall ? 0.65 : 1;
         const w = this.cardWidth * scale;
         const h = this.cardHeight * scale;
         
-        // Card background
-        const bg = this.add.rectangle(0, 0, w - 4, h - 4, canAfford ? 0x3a3a5e : 0x2a2a3e);
-        container.add(bg);
-        
-        // Card icon (shape based on card)
-        const iconY = -h/4;
-        const iconSize = 16 * scale;
-        
-        let icon;
-        switch (card.shape) {
-            case 'triangle':
-                icon = this.add.triangle(0, iconY, 0, iconSize, iconSize, iconSize, iconSize/2, 0, card.color);
-                break;
-            case 'hexagon':
-                icon = this.add.polygon(0, iconY, [
-                    0, -iconSize, iconSize*0.87, -iconSize/2, iconSize*0.87, iconSize/2,
-                    0, iconSize, -iconSize*0.87, iconSize/2, -iconSize*0.87, -iconSize/2
-                ], card.color);
-                break;
-            case 'square':
-                icon = this.add.rectangle(0, iconY, iconSize, iconSize, card.color);
-                break;
-            case 'diamond':
-                icon = this.add.polygon(0, iconY, [0, -iconSize, iconSize, 0, 0, iconSize, -iconSize, 0], card.color);
-                break;
-            case 'circle':
-                icon = this.add.circle(0, iconY, iconSize/2, card.color);
-                break;
-            case 'plus':
-                icon = this.add.rectangle(0, iconY, iconSize, iconSize/3, card.color);
-                const plusV = this.add.rectangle(0, iconY, iconSize/3, iconSize, card.color);
-                container.add(plusV);
-                break;
-            case 'zone':
-                icon = this.add.circle(0, iconY, iconSize/2, card.color, 0.5);
-                icon.setStrokeStyle(2, card.color);
-                break;
-            case 'beacon':
-                icon = this.add.triangle(0, iconY, 0, iconSize, iconSize, iconSize, iconSize/2, 0, card.color);
-                icon.setStrokeStyle(2, 0xffffff);
-                break;
-            default:
-                icon = this.add.circle(0, iconY, iconSize/2, card.color);
+        // Card shadow
+        if (!isSmall) {
+            const shadow = this.add.ellipse(0, h/2 - 2, w * 0.8, 8, 0x000000, 0.3);
+            container.add(shadow);
         }
-        container.add(icon);
+        
+        // Card background with gradient
+        const bgColor = canAfford ? this.colors.cardBgAfford : this.colors.cardBg;
+        const borderColor = isSelected ? this.colors.cardSelected : this.colors.cardBorder;
+        
+        const cardBg = this.add.graphics();
+        cardBg.fillStyle(bgColor, 1);
+        cardBg.fillRoundedRect(-w/2, -h/2, w, h, 8 * scale);
+        cardBg.lineStyle(2 * scale, borderColor, 1);
+        cardBg.strokeRoundedRect(-w/2, -h/2, w, h, 8 * scale);
+        container.add(cardBg);
+        
+        // Inner highlight
+        const highlight = this.add.graphics();
+        highlight.fillStyle(0xffffff, 0.05);
+        highlight.fillRoundedRect(-w/2 + 3, -h/2 + 3, w - 6, h/3, 6 * scale);
+        container.add(highlight);
+        
+        // Card icon
+        const iconY = -h/4 - 2;
+        const iconSize = 18 * scale;
+        this.createCardIcon(container, card, iconY, iconSize);
         
         // Card name
-        const nameText = this.add.text(0, h/4 - 10, card.name, {
+        const name = this.add.text(0, h/4 - 6 * scale, card.name, {
             fontSize: `${10 * scale}px`,
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            align: 'center'
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff'
         });
-        nameText.setOrigin(0.5);
-        container.add(nameText);
+        name.setOrigin(0.5);
+        container.add(name);
         
-        // Elixir cost
-        const costBg = this.add.circle(-w/2 + 12, -h/2 + 12, 10 * scale, 0x9b59b6);
-        const costText = this.add.text(-w/2 + 12, -h/2 + 12, card.cost.toString(), {
+        // Cost badge
+        const badgeSize = 18 * scale;
+        const badgeX = -w/2 + badgeSize/2 + 4;
+        const badgeY = -h/2 + badgeSize/2 + 4;
+        
+        const costBadge = this.add.graphics();
+        costBadge.fillStyle(0x9b59b6, 1);
+        costBadge.fillCircle(badgeX, badgeY, badgeSize/2);
+        costBadge.lineStyle(2 * scale, 0xc27be8, 1);
+        costBadge.strokeCircle(badgeX, badgeY, badgeSize/2);
+        container.add(costBadge);
+        
+        const costText = this.add.text(badgeX, badgeY, card.cost.toString(), {
             fontSize: `${12 * scale}px`,
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            fontStyle: 'bold'
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff'
         });
         costText.setOrigin(0.5);
-        container.add(costBg);
         container.add(costText);
         
-        // Dim if can't afford
+        // Darken if can't afford
         if (!canAfford && !isSmall) {
-            const overlay = this.add.rectangle(0, 0, w - 4, h - 4, 0x000000, 0.5);
+            const overlay = this.add.graphics();
+            overlay.fillStyle(0x000000, 0.5);
+            overlay.fillRoundedRect(-w/2, -h/2, w, h, 8);
             container.add(overlay);
         }
     }
     
-    createTowerHPBar(x, y, isEnemy) {
-        const barWidth = 50;
-        const barHeight = 8;
+    createCardIcon(container, card, y, size) {
+        let icon;
         
-        const container = this.add.container(x, y - 30);
+        switch (card.shape) {
+            case 'triangle':
+                icon = this.add.triangle(0, y, -size/2, size/2, size/2, size/2, 0, -size/2, card.color);
+                break;
+            case 'hexagon':
+                icon = this.add.polygon(0, y, [
+                    0, -size, size*0.87, -size/2, size*0.87, size/2,
+                    0, size, -size*0.87, size/2, -size*0.87, -size/2
+                ], card.color);
+                icon.setScale(0.6);
+                break;
+            case 'square':
+                icon = this.add.rectangle(0, y, size, size, card.color);
+                break;
+            case 'diamond':
+                icon = this.add.polygon(0, y, [0, -size, size, 0, 0, size, -size, 0], card.color);
+                icon.setScale(0.6);
+                break;
+            case 'circle':
+                icon = this.add.circle(0, y, size/2, card.color);
+                break;
+            case 'plus':
+                const h = this.add.rectangle(0, y, size, size/3, card.color);
+                const v = this.add.rectangle(0, y, size/3, size, card.color);
+                container.add(h);
+                container.add(v);
+                return;
+            case 'zone':
+                icon = this.add.circle(0, y, size/2, card.color, 0.4);
+                icon.setStrokeStyle(2, card.color);
+                break;
+            case 'beacon':
+                icon = this.add.triangle(0, y, -size/2, size/2, size/2, size/2, 0, -size/2, card.color);
+                icon.setStrokeStyle(2, 0xffffff);
+                break;
+            default:
+                icon = this.add.circle(0, y, size/2, card.color);
+        }
+        
+        if (icon) {
+            container.add(icon);
+        }
+    }
+    
+    createTowerHPBar(x, y, isEnemy, isCore = false) {
+        const barWidth = isCore ? 60 : 45;
+        const barHeight = 7;
+        
+        const container = this.add.container(x, y - (isCore ? 45 : 35));
         container.setDepth(90);
         
-        const bg = this.add.rectangle(0, 0, barWidth, barHeight, 0x333333);
-        const fill = this.add.rectangle(-barWidth/2 + 1, 0, barWidth - 2, barHeight - 2, isEnemy ? 0xff4444 : 0x44ff44);
-        fill.setOrigin(0, 0.5);
-        
-        const border = this.add.rectangle(0, 0, barWidth, barHeight);
-        border.setStrokeStyle(1, 0xffffff);
-        border.setFillStyle();
-        
+        // Background
+        const bg = this.add.graphics();
+        bg.fillStyle(0x1a1a2e, 0.9);
+        bg.fillRoundedRect(-barWidth/2, -barHeight/2, barWidth, barHeight, 3);
+        bg.lineStyle(1, 0x3a3a5e, 1);
+        bg.strokeRoundedRect(-barWidth/2, -barHeight/2, barWidth, barHeight, 3);
         container.add(bg);
-        container.add(fill);
-        container.add(border);
         
-        return { container, fill, barWidth };
+        // Fill
+        const fillColor = isEnemy ? this.colors.towerHpEnemy : this.colors.towerHpPlayer;
+        const fill = this.add.rectangle(-barWidth/2 + 2, 0, barWidth - 4, barHeight - 3, fillColor);
+        fill.setOrigin(0, 0.5);
+        container.add(fill);
+        
+        // Crown icon for core
+        if (isCore) {
+            const crown = this.add.text(0, -12, '👑', { fontSize: '10px' });
+            crown.setOrigin(0.5);
+            container.add(crown);
+        }
+        
+        return { container, fill, barWidth: barWidth - 4 };
     }
     
     updateTowerHP(bar, currentHP, maxHP) {
         if (!bar || !bar.fill) return;
         const percent = Math.max(0, currentHP / maxHP);
-        bar.fill.width = (bar.barWidth - 2) * percent;
+        bar.fill.width = bar.barWidth * percent;
+        
+        // Color change based on HP
+        if (percent < 0.3) {
+            bar.fill.setFillStyle(0xff4757);
+        } else if (percent < 0.6) {
+            bar.fill.setFillStyle(0xffa502);
+        }
     }
     
     showMomentumChoice() {
@@ -673,5 +679,4 @@ class UIScene extends Phaser.Scene {
     }
 }
 
-// Export for use in other modules
 window.UIScene = UIScene;
