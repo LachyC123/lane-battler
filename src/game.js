@@ -106,6 +106,16 @@ class GameScene extends Phaser.Scene {
     }
     
     create() {
+        // Temporary debug text so we can confirm the match scene is active
+        this.add.text(12, 12, 'MATCH RUNNING', {
+            fontSize: '14px',
+            fontFamily: 'Exo 2, Arial',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            backgroundColor: 'rgba(0,0,0,0.35)',
+            padding: { x: 6, y: 4 }
+        }).setDepth(10000).setScrollFactor(0);
+
         // Game dimensions
         this.gameWidth = this.cameras.main.width;
         this.gameHeight = this.cameras.main.height;
