@@ -118,10 +118,14 @@ class AIController {
         const maxThreat = Math.max(topThreat, bottomThreat);
         
         if (maxThreat > this.difficulty.defendThreshold * 100) {
-            return this.decideDefense(gameState, topThreat > bottomThreat ? 'top' : 'bottom');
+            // Defend the WEAKER lane: higher threat relative to our defense
+            const topVulnerability = topThreat - this.pushStrength.top;
+            const bottomVulnerability = bottomThreat - this.pushStrength.bottom;
+            const defendLane = topVulnerability > bottomVulnerability ? 'top' : 'bottom';
+            return this.decideDefense(gameState, defendLane);
         }
         
-        // Priority 4: Push in advantageous lane
+        // Priority 4: Push in advantageous lane (only when elixir is high enough)
         if (this.elixir >= this.difficulty.elixirThreshold) {
             return this.decidePush(gameState);
         }
@@ -149,7 +153,7 @@ class AIController {
         const hand = this.deckManager.getHandCards();
         
         // Prioritize: Guardian (tank), Bomber Bug (AoE), Runner (fast response)
-        const defensePriority = ['guardian', 'bomberBug', 'runner', 'slingbot', 'sparkMage'];
+        const defensePriority = ['guardian', 'bomberBug', 'runner', 'slingbot', 'sparkMage', 'healerDrone'];
         
         for (const cardId of defensePriority) {
             const handIndex = hand.findIndex(c => c.id === cardId);
@@ -158,8 +162,8 @@ class AIController {
             }
         }
         
-        // Play any affordable card
-        return this.playAnyAffordable(lane, 'defense', gameState);
+        // Don't spam random cards - wait for a good defensive card
+        return null;
     }
     
     decidePush(gameState) {
@@ -174,7 +178,7 @@ class AIController {
         }
         
         // Prioritize: Guardian (tank), then damage dealers
-        const pushPriority = ['guardian', 'sparkMage', 'slingbot', 'bomberBug', 'runner', 'healerDrone'];
+        const pushPriority = ['guardian', 'sparkMage', 'slingbot', 'bomberBug', 'runner', 'healerDrone', 'barrierPad', 'decoyBeacon'];
         
         for (const cardId of pushPriority) {
             const handIndex = hand.findIndex(c => c.id === cardId);
@@ -183,8 +187,8 @@ class AIController {
             }
         }
         
-        // Try tactics
-        return this.playAnyAffordable(lane, 'push', gameState);
+        // Don't spam - wait for better cards
+        return null;
     }
     
     playAnyAffordable(lane, reason, gameState) {
